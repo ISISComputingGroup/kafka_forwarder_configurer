@@ -1,27 +1,16 @@
-# This file is part of the ISIS IBEX application.
-# Copyright (C) 2012-2020 Science & Technology Facilities Council.
-# All rights reserved.
-#
-# This program is distributed in the hope that it will be useful.
-# This program and the accompanying materials are made available under the
-# terms of the Eclipse Public License v1.0 which accompanies this distribution.
-# EXCEPT AS EXPRESSLY SET FORTH IN THE ECLIPSE PUBLIC LICENSE V1.0, THE PROGRAM
-# AND ACCOMPANYING MATERIALS ARE PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES
-# OR CONDITIONS OF ANY KIND.  See the Eclipse Public License v1.0 for more details.
-#
-# You should have received a copy of the Eclipse Public License v1.0
-# along with this program; if not, you can obtain a copy from
-# https://www.eclipse.org/org/documents/epl-v10.php or
-# http://opensource.org/licenses/eclipse-1.0.php
 import json
+import logging
+import numpy as np
+import numpy.typing as npt
+
 from epics import PV
 from threading import RLock
 
-from server_common.helpers import BLOCK_PREFIX
-from server_common.utilities import dehex_and_decompress, print_and_log
+from ibex_non_ca_helpers.compress_hex import dehex_and_decompress
 
 from kafka_producer import ProducerWrapper
 
+logger = logging.getLogger(__name__)
 
 class BlockServerMonitor:
     """
@@ -33,17 +22,18 @@ class BlockServerMonitor:
     def __init__(self, address: str, pvprefix: str, producer: ProducerWrapper) -> None:
         self.pv_prefix = pvprefix
         self.address = address
-        self.channel = PV(self.address)
+        self.channel = PV(self.address, auto_monitor=True, callback=self.update)
         self.producer = producer
         self.last_pvs = []
         self.monitor_lock = RLock()
 
+
         connected = self.channel.wait_for_connection(timeout=5)
         if not connected: 
-            print_and_log(f"Unable to find pv {self.address}")
+            logger.error(f"Unable to find pv {self.address}")
             return
+        logger.info(f"Connected to {self.address}")
 
-        self.pv.add_callback(self.update)
 
     def block_name_to_pv_name(self, blk: str) -> str:
         """
@@ -55,24 +45,8 @@ class BlockServerMonitor:
         Returns:
             string : the associated PV name.
         """
-        return f"{self.pv_prefix}{BLOCK_PREFIX}{blk}"
+        return f"{self.pv_prefix}CS:SB:{blk}"
 
-    @staticmethod
-    def convert_to_string(pv_array: bytearray) -> str:
-        """
-        Convert from byte array to string and remove null characters.
-
-        We cannot get the number of elements in the array so convert to bytes and remove the
-        null characters.
-
-        Args:
-            pv_array (bytearray): The byte array of PVs.
-
-        Returns:
-            string : The string formed from the bytearray.
-        """
-
-        return bytearray(pv_array).decode("utf-8").replace("\x00", "")
 
     def update_config(self, blocks: list[str]) -> None:
         """
@@ -87,12 +61,12 @@ class BlockServerMonitor:
 
         pvs = [self.block_name_to_pv_name(blk) for blk in blocks]
         if pvs != self.last_pvs:
-            print_and_log(f"Blocks configuration changed to: {pvs}")
+            logger.info(f"Blocks configuration changed to: {pvs}")
             self.producer.remove_config(self.last_pvs)
             self.producer.add_config(pvs)
             self.last_pvs = pvs
 
-    def update(self, _, value: bytearray, **kwargs) -> None:  # noqa: ANN401
+    def update(self, value: npt.NDArray[np.uint8], **kwargs) -> None:  # noqa: ANN401
         """
         Updates the kafka config when the blockserver changes. This is called from the monitor.
 
@@ -105,8 +79,7 @@ class BlockServerMonitor:
         """
 
         with self.monitor_lock:
-            data = self.convert_to_string(value)
-            data = dehex_and_decompress(bytes(data, encoding="utf-8"))
+            logger.info("new update %s ", value)
+            data = dehex_and_decompress(value.tobytes())
             blocks = json.loads(data)
-
             self.update_config(blocks)

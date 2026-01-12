@@ -1,11 +1,13 @@
+import logging
 from threading import Timer
 
 from genie_python.mysql_abstraction_layer import SQLAbstraction
-from server_common.utilities import print_and_log
 
 from kafka_producer import ProducerWrapper
 
 UPDATE_FREQUENCY_S = 30.0
+
+logger = logging.getLogger(__name__)
 
 
 class InstPVs(object):
@@ -46,7 +48,7 @@ class InstPVs(object):
                 pvs.add(f"{basename}.{field}")
 
         if self._pvs != pvs:
-            print_and_log(f"Inst configuration changed to: {pvs}")
+            logger.info(f"Inst configuration changed to: {pvs}")
             self.producer.remove_config(list(self._pvs - pvs))
             self.producer.add_config(list(pvs - self._pvs))
             self._pvs = pvs

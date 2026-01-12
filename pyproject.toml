@@ -30,8 +30,8 @@ dependencies = [
 "pyepics",
 "ess-streaming-data-types",
 "genie-python",
-"server_common@git+https://github.com/ISISComputingGroup/server_common.git"
-
+"ibex-non-ca-helpers",
+  "kafka-python"
 ]
 
 [project.optional-dependencies]
@@ -104,7 +104,7 @@ reportUntypedBaseClass = true
 reportUntypedClassDecorator = true
 reportUntypedFunctionDecorator = true
 
-[tool.setuptools_scm]
-version_file = "src/kafka_forwarder_configurer/version.py"
+#[tool.setuptools_scm]
+#version_file = "src/kafka_forwarder_configurer/version.py"
 
 [tool.build_sphinx]
