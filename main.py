@@ -35,7 +35,6 @@ if __name__ == "__main__":
         "-b",
         "--broker",
         help="Location of the Kafka brokers (host:port)",
-        nargs="+",
         type=str,
         default="livedata.isis.cclrc.ac.uk:31092",
     )
@@ -44,7 +43,7 @@ if __name__ == "__main__":
         "--pvprefix",
         help="PV Prefix of the block server",
         type=str,
-        default=environ["MYPVPREFIX"],
+        default=environ.get("MYPVPREFIX"),
     )
 
     args = parser.parse_args()

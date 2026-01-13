@@ -1,25 +1,27 @@
 import logging
 from threading import Timer
 
-from genie_python.mysql_abstraction_layer import SQLAbstraction
 
 from kafka_producer import ProducerWrapper
 
 UPDATE_FREQUENCY_S = 30.0
 
 logger = logging.getLogger(__name__)
+import mysql.connector
 
 
 class InstPVs(object):
     def __init__(
-        self, producer: ProducerWrapper, sql_abstraction: SQLAbstraction | None = None
+        self, producer: ProducerWrapper
     ) -> None:
         self._pvs: set[str] = set()
-        self._sql = (
-            SQLAbstraction(dbid="iocdb", user="report", password="$report", host="localhost")
-            if sql_abstraction is None
-            else sql_abstraction
-        )
+        self._sql = mysql.connector.connect(
+            database="iocdb",
+            host="localhost",
+            port=3306,
+            user="report",
+            password="$report")
+
         self.producer = producer
 
     def schedule(self) -> None:
@@ -27,17 +29,22 @@ class InstPVs(object):
             self.update_pvs_from_mysql()
             self.schedule()
 
+        self.update_pvs_from_mysql()
         job = Timer(UPDATE_FREQUENCY_S, action)
         job.start()
 
     def update_pvs_from_mysql(self) -> None:
-        rows = self._sql.query('SELECT pvname, value FROM iocdb.pvinfo WHERE infoname="archive";')
-        if rows is None:
+        cursor = self._sql.cursor()
+        query = 'SELECT pvname, value FROM iocdb.pvinfo WHERE infoname="archive";'
+        cursor.execute(query)
+        rows = cursor.fetchall()
+        if not rows:
+            logger.error(f"No data from query ({query}")
+            cursor.close()
             return
 
         pvs = set()
-        for row in rows:
-            basename, fields = row
+        for (basename, fields) in rows:
             assert isinstance(fields, str)
             for field in fields.split():
                 if all(c in "0123456789." for c in field):
@@ -52,3 +59,4 @@ class InstPVs(object):
             self.producer.remove_config(list(self._pvs - pvs))
             self.producer.add_config(list(pvs - self._pvs))
             self._pvs = pvs
+        cursor.close()

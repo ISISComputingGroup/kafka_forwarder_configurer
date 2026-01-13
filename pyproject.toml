@@ -29,9 +29,9 @@ classifiers = [
 dependencies = [
 "pyepics",
 "ess-streaming-data-types",
-"genie-python",
 "ibex-non-ca-helpers",
-  "kafka-python"
+  "confluent_kafka",
+  "mysql-conector-python"
 ]
 
 [project.optional-dependencies]

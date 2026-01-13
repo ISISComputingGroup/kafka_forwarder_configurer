@@ -32,7 +32,3 @@ class ForwarderConfig:
 
     def remove_forwarder_configuration(self, pvs: List[str]) -> bytes:
         return serialise_fc00(UpdateType.REMOVE, self._create_streams(pvs))  # pyright: ignore
-
-    @staticmethod
-    def remove_all_forwarder_configuration() -> bytes:
-        return serialise_fc00(UpdateType.REMOVEALL, [])  # pyright: ignore

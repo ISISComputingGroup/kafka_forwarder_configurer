@@ -2,7 +2,7 @@ import logging
 from time import sleep
 from typing import List
 
-from kafka import KafkaConsumer, KafkaProducer, errors
+from confluent_kafka import Producer
 from streaming_data_types.fbschemas.forwarder_config_update_fc00.Protocol import (
     Protocol,
 )
@@ -35,25 +35,13 @@ class ProducerWrapper:
         Attempts to create a Kafka producer and consumer. Retries with a recursive call every 30s.
         """
         try:
-            self.client = KafkaConsumer(bootstrap_servers=server)
-            self.producer = KafkaProducer(bootstrap_servers=server)
+            self.producer = Producer({"bootstrap.servers": server})
             if not self.topic_exists(self.topic):
                 logger.warning(
                     f"WARNING: topic {self.topic} does not exist. It will be created by default."
                 )
             return True
-        except errors.NoBrokersAvailable:
-            logger.error(f"No brokers found on server: {server[0]}")
-        except errors.KafkaConnectionError:
-            logger.error("No server found, connection error")
-        except errors.InvalidConfigurationError:
-            logger.error("Invalid configuration")
-            quit()
-        except errors.InvalidTopicError:
-            logger.error(
-                "Invalid topic, to enable auto creation of topics set"
-                " auto.create.topics.enable to false in broker configuration",
-            )
+
         except Exception:
             logger.exception(
                 f"Unexpected error while creating producer or consumer: ",
@@ -67,10 +55,10 @@ class ProducerWrapper:
         :param pvs: A list of new PVs to add to the forwarder configuration.
         """
         message_buffer = self.converter.create_forwarder_configuration(pvs)
-        self.producer.send(self.topic, message_buffer)
+        self.producer.produce(self.topic, message_buffer)
 
     def topic_exists(self, topic_name: str) -> bool:
-        return topic_name in self.client.topics()
+        return topic_name in self.producer.list_topics(topic_name).topics
 
     def remove_config(self, pvs: List[str]) -> None:
         """
@@ -79,11 +67,4 @@ class ProducerWrapper:
         :param pvs: A list of PVs to remove from the forwarder configuration.
         """
         message_buffer = self.converter.remove_forwarder_configuration(pvs)
-        self.producer.send(self.topic, message_buffer)
-
-    def stop_all_pvs(self) -> None:
-        """
-        Sends a stop_all command to the forwarder to clear all configuration.
-        """
-        message_buffer = self.converter.remove_all_forwarder_configuration()
-        self.producer.send(self.topic, message_buffer)
+        self.producer.produce(self.topic, message_buffer)
